@@ -37,10 +37,11 @@ func hasProg(prog ...string) bool {
 }
 
 var hasZlib = hasProg("gzip", "-d")
+var hasPigz = hasProg("pigz", "-d")
 
 func newFastGzReader(r io.Reader) (io.ReadCloser, error) {
 
-	if hasZlib {
+	if hasZlib || hasPigz {
 		var gz fastGzReader
 		if err := gz.Reset(r); err != nil {
 			return nil, err
@@ -55,8 +56,12 @@ func (gz *fastGzReader) Reset(r io.Reader) error {
 	if gz.ReadCloser != nil {
 		gz.Close()
 	}
-
-	cmd := exec.Command("gzip", "-d")
+	var cmd *exec.Cmd
+	if hasPigz {
+		cmd = exec.Command("pigz", "-d")
+	} else {
+		cmd = exec.Command("gzip", "-d")
+	}
 	cmd.Stdin = r
 
 	rpipe, err := cmd.StdoutPipe()
