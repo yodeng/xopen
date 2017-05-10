@@ -173,7 +173,7 @@ func Ropen(f string) (*Reader, error) {
 	var rdr io.Reader
 	if f == "-" {
 		if !IsStdin() {
-			return nil, errors.New("warning: stdin not detected")
+			return nil, errors.New("stdin not detected")
 		}
 		b := Buf(os.Stdin)
 		return b, nil
