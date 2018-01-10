@@ -143,6 +143,15 @@ func Buf(r io.Reader) *Reader {
 		}
 		b = bufio.NewReaderSize(rdr, pageSize)
 	}
+
+	// check BOM
+	t, _, err := b.ReadRune()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if t != '\uFEFF' {
+		b.UnreadRune()
+	}
 	return &Reader{b, r, rdr}
 }
 
