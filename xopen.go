@@ -234,6 +234,23 @@ func Wopen(f string) (*Writer, error) {
 	return &Writer{bufio.NewWriterSize(gz, pageSize), wtr, gz}, nil
 }
 
+// WopenGzip opens a buffered gzipped reader.
+// If f == "-", then stdout will be used.
+func WopenGzip(f string) (*Writer, error) {
+	var wtr *os.File
+	var err error
+	if f == "-" {
+		wtr = os.Stdout
+	} else {
+		wtr, err = os.Create(f)
+		if err != nil {
+			return nil, err
+		}
+	}
+	gz := gzip.NewWriter(wtr)
+	return &Writer{bufio.NewWriterSize(gz, pageSize), wtr, gz}, nil
+}
+
 // WopenFile opens a buffered reader.
 // If f == "-", then stdout will be used.
 // If f endswith ".gz", then the output will be gzipped.
