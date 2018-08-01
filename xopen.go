@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,6 +19,9 @@ import (
 	//"github.com/klauspost/compress/gzip"
 	// "compress/gzip"
 )
+
+// ErrNoContent means nothing in the stream/file
+var ErrNoContent = fmt.Errorf("xopen: no content")
 
 // IsGzip returns true buffered Reader has the gzip magic.
 func IsGzip(b *bufio.Reader) (bool, error) {
@@ -72,7 +74,7 @@ func CheckBytes(b *bufio.Reader, buf []byte) (bool, error) {
 
 	m, err := b.Peek(len(buf))
 	if err != nil {
-		return false, err
+		return false, ErrNoContent
 	}
 	for i := range buf {
 		if m[i] != buf[i] {
@@ -130,16 +132,16 @@ var pageSize = os.Getpagesize() * 2
 // Buf returns a buffered reader from an io.Reader
 // If f == "-", then it will attempt to read from os.Stdin.
 // If the file is gzipped, it will be read as such.
-func Buf(r io.Reader) *Reader {
+func Buf(r io.Reader) (*Reader, error) {
 	b := bufio.NewReaderSize(r, pageSize)
 	var rdr io.ReadCloser
 	if is, err := IsGzip(b); err != nil && err != io.EOF {
-		log.Fatal(err)
+		return nil, err
 	} else if is {
 		// rdr, err = newFastGzReader(b)
 		rdr, err = gzip.NewReader(b)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		b = bufio.NewReaderSize(rdr, pageSize)
 	}
@@ -147,12 +149,12 @@ func Buf(r io.Reader) *Reader {
 	// check BOM
 	t, _, err := b.ReadRune()
 	if err != nil {
-		log.Fatal(err)
+		return nil, ErrNoContent
 	}
 	if t != '\uFEFF' {
 		b.UnreadRune()
 	}
-	return &Reader{b, r, rdr}
+	return &Reader{b, r, rdr}, nil
 }
 
 // XReader returns a reader from a url string or a file.
@@ -184,8 +186,8 @@ func Ropen(f string) (*Reader, error) {
 		if !IsStdin() {
 			return nil, errors.New("stdin not detected")
 		}
-		b := Buf(os.Stdin)
-		return b, nil
+		b, err := Buf(os.Stdin)
+		return b, err
 	} else if f[0] == '|' {
 		// TODO: use csv to handle quoted file names.
 		cmdStrs := strings.Split(f[1:], " ")
@@ -209,8 +211,8 @@ func Ropen(f string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := Buf(rdr)
-	return b, nil
+	b, err := Buf(rdr)
+	return b, err
 }
 
 // Wopen opens a buffered reader.
