@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"strings"
 
 	gzip "github.com/klauspost/pgzip"
@@ -220,10 +221,18 @@ func Ropen(f string) (*Reader, error) {
 // If f endswith ".gz", then the output will be gzipped.
 func Wopen(f string) (*Writer, error) {
 	var wtr *os.File
-	var err error
 	if f == "-" {
 		wtr = os.Stdout
 	} else {
+		dir := filepath.Dir(f)
+		fi, err := os.Stat(dir)
+		if err == nil && !fi.IsDir() {
+			return nil, fmt.Errorf("can not write file into a non-directory path: %s", dir)
+		}
+		if os.IsNotExist(err) {
+			os.MkdirAll(dir, 0755)
+		}
+
 		wtr, err = os.Create(f)
 		if err != nil {
 			return nil, err
@@ -240,10 +249,17 @@ func Wopen(f string) (*Writer, error) {
 // If f == "-", then stdout will be used.
 func WopenGzip(f string) (*Writer, error) {
 	var wtr *os.File
-	var err error
 	if f == "-" {
 		wtr = os.Stdout
 	} else {
+		dir := filepath.Dir(f)
+		fi, err := os.Stat(dir)
+		if err == nil && !fi.IsDir() {
+			return nil, fmt.Errorf("can not write file into a non-directory path: %s", dir)
+		}
+		if os.IsNotExist(err) {
+			os.MkdirAll(dir, 0755)
+		}
 		wtr, err = os.Create(f)
 		if err != nil {
 			return nil, err
