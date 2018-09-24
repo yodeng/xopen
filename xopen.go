@@ -274,10 +274,17 @@ func WopenGzip(f string) (*Writer, error) {
 // If f endswith ".gz", then the output will be gzipped.
 func WopenFile(f string, flag int, perm os.FileMode) (*Writer, error) {
 	var wtr *os.File
-	var err error
 	if f == "-" {
 		wtr = os.Stdout
 	} else {
+		dir := filepath.Dir(f)
+		fi, err := os.Stat(dir)
+		if err == nil && !fi.IsDir() {
+			return nil, fmt.Errorf("can not write file into a non-directory path: %s", dir)
+		}
+		if os.IsNotExist(err) {
+			os.MkdirAll(dir, 0755)
+		}
 		wtr, err = os.OpenFile(f, flag, perm)
 		if err != nil {
 			return nil, err
