@@ -21,8 +21,11 @@ import (
 	// "compress/gzip"
 )
 
-// ErrNoContent means nothing in the stream/file
-var ErrNoContent = fmt.Errorf("xopen: no content")
+// ErrNoContent means nothing in the stream/file.
+var ErrNoContent = errors.New("xopen: no content")
+
+// ErrDirNotSupported means the path is a directory.
+var ErrDirNotSupported = errors.New("xopen: input is a directory")
 
 // IsGzip returns true buffered Reader has the gzip magic.
 func IsGzip(b *bufio.Reader) (bool, error) {
@@ -176,6 +179,15 @@ func XReader(f string) (io.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	fi, err := os.Stat(f)
+	if err != nil {
+		return nil, err
+	}
+	if fi.IsDir() {
+		return nil, ErrDirNotSupported
+	}
+
 	return os.Open(f)
 }
 
