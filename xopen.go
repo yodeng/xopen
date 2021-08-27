@@ -131,13 +131,13 @@ func (w *Writer) Flush() {
 	}
 }
 
-var pageSize = os.Getpagesize() * 2
+var bufSize = 65536
 
 // Buf returns a buffered reader from an io.Reader
 // If f == "-", then it will attempt to read from os.Stdin.
 // If the file is gzipped, it will be read as such.
 func Buf(r io.Reader) (*Reader, error) {
-	b := bufio.NewReaderSize(r, pageSize)
+	b := bufio.NewReaderSize(r, bufSize)
 	var rdr io.ReadCloser
 	if is, err := IsGzip(b); err != nil && err != io.EOF {
 		return nil, err
@@ -147,7 +147,7 @@ func Buf(r io.Reader) (*Reader, error) {
 		if err != nil {
 			return nil, err
 		}
-		b = bufio.NewReaderSize(rdr, pageSize)
+		b = bufio.NewReaderSize(rdr, bufSize)
 	}
 
 	// check BOM
@@ -251,10 +251,10 @@ func Wopen(f string) (*Writer, error) {
 		}
 	}
 	if !strings.HasSuffix(f, ".gz") {
-		return &Writer{bufio.NewWriterSize(wtr, pageSize), wtr, nil}, nil
+		return &Writer{bufio.NewWriterSize(wtr, bufSize), wtr, nil}, nil
 	}
 	gz := gzip.NewWriter(wtr)
-	return &Writer{bufio.NewWriterSize(gz, pageSize), wtr, gz}, nil
+	return &Writer{bufio.NewWriterSize(gz, bufSize), wtr, gz}, nil
 }
 
 // WopenGzip opens a buffered gzipped reader.
@@ -278,7 +278,7 @@ func WopenGzip(f string) (*Writer, error) {
 		}
 	}
 	gz := gzip.NewWriter(wtr)
-	return &Writer{bufio.NewWriterSize(gz, pageSize), wtr, gz}, nil
+	return &Writer{bufio.NewWriterSize(gz, bufSize), wtr, gz}, nil
 }
 
 // WopenFile opens a buffered reader.
@@ -303,8 +303,8 @@ func WopenFile(f string, flag int, perm os.FileMode) (*Writer, error) {
 		}
 	}
 	if !strings.HasSuffix(f, ".gz") {
-		return &Writer{bufio.NewWriterSize(wtr, pageSize), wtr, nil}, nil
+		return &Writer{bufio.NewWriterSize(wtr, bufSize), wtr, nil}, nil
 	}
 	gz := gzip.NewWriter(wtr)
-	return &Writer{bufio.NewWriterSize(gz, pageSize), wtr, gz}, nil
+	return &Writer{bufio.NewWriterSize(gz, bufSize), wtr, gz}, nil
 }
