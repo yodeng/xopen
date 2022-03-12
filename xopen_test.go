@@ -49,7 +49,7 @@ func (s *XopenTest) TestIsStdin(c *C) {
 
 func (s *XopenTest) TestRopen(c *C) {
 	rdr, err := Ropen("-")
-	c.Assert(err, ErrorMatches, ".* stdin not detected")
+	c.Assert(err, ErrorMatches, "stdin not detected")
 	c.Assert(rdr, IsNil)
 }
 
@@ -130,13 +130,7 @@ func (s *XopenTest) TestOpenStdout(c *C) {
 func (s *XopenTest) TestOpenBadFile(c *C) {
 	r, err := Ropen("XXXXXXXXXXXXXXXXXXXXXXX")
 	c.Assert(r, IsNil)
-	c.Assert(err, ErrorMatches, ".* no such file .*")
-}
-
-func (s *XopenTest) TestWOpenBadFile(c *C) {
-	w, err := Wopen("XX/XXX/XXX/XXX/XXX/XXXXXXXXX")
-	c.Assert(w, IsNil)
-	c.Assert(err, ErrorMatches, ".* no such file .*")
+	c.Assert(err, ErrorMatches, ".*no such file.*")
 }
 
 func (s *XopenTest) TestExists(c *C) {

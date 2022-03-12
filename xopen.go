@@ -17,8 +17,6 @@ import (
 	"strings"
 
 	gzip "github.com/klauspost/pgzip"
-	//"github.com/klauspost/compress/gzip"
-	// "compress/gzip"
 )
 
 // ErrNoContent means nothing in the stream/file.
@@ -44,7 +42,7 @@ func IsStdin() bool {
 
 // ExpandUser expands ~/path and ~otheruser/path appropriately
 func ExpandUser(path string) (string, error) {
-	if path[0] != '~' {
+	if len(path) == 0 || path[0] != '~' {
 		return path, nil
 	}
 	var u *user.User
@@ -142,7 +140,6 @@ func Buf(r io.Reader) (*Reader, error) {
 	if is, err := IsGzip(b); err != nil && err != io.EOF {
 		return nil, err
 	} else if is {
-		// rdr, err = newFastGzReader(b)
 		rdr, err = gzip.NewReader(b)
 		if err != nil {
 			return nil, err
