@@ -16,7 +16,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/klauspost/compress/zstd"
 	gzip "github.com/klauspost/pgzip"
+	"github.com/ulikunitz/xz"
 )
 
 // ErrNoContent means nothing in the stream/file.
@@ -28,6 +30,16 @@ var ErrDirNotSupported = errors.New("xopen: input is a directory")
 // IsGzip returns true buffered Reader has the gzip magic.
 func IsGzip(b *bufio.Reader) (bool, error) {
 	return CheckBytes(b, []byte{0x1f, 0x8b})
+}
+
+// IsXz returns true buffered Reader has the xz magic.
+func IsXz(b *bufio.Reader) (bool, error) {
+	return CheckBytes(b, []byte{0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00})
+}
+
+// IsZst returns true buffered Reader has the zstd magic.
+func IsZst(b *bufio.Reader) (bool, error) {
+	return CheckBytes(b, []byte{0x28, 0xB5, 0x2f, 0xfd})
 }
 
 // IsStdin checks if we are getting data from stdin.
@@ -109,6 +121,8 @@ type Writer struct {
 	*bufio.Writer
 	wtr *os.File
 	gz  *gzip.Writer
+	xw  *xz.Writer
+	zw  *zstd.Encoder
 }
 
 // Close the associated files.
@@ -116,6 +130,12 @@ func (w *Writer) Close() error {
 	w.Flush()
 	if w.gz != nil {
 		w.gz.Close()
+	}
+	if w.xw != nil {
+		w.xw.Close()
+	}
+	if w.zw != nil {
+		w.zw.Close()
 	}
 	w.wtr.Close()
 	return nil
@@ -127,6 +147,9 @@ func (w *Writer) Flush() {
 	if w.gz != nil {
 		w.gz.Flush()
 	}
+	if w.zw != nil {
+		w.zw.Flush()
+	}
 }
 
 var bufSize = 65536
@@ -136,6 +159,7 @@ var bufSize = 65536
 // If the file is gzipped, it will be read as such.
 func Buf(r io.Reader) (*Reader, error) {
 	b := bufio.NewReaderSize(r, bufSize)
+	var rd io.Reader
 	var rdr io.ReadCloser
 	if is, err := IsGzip(b); err != nil && err != io.EOF {
 		return nil, err
@@ -145,6 +169,22 @@ func Buf(r io.Reader) (*Reader, error) {
 			return nil, err
 		}
 		b = bufio.NewReaderSize(rdr, bufSize)
+	} else if is, err := IsXz(b); err != nil && err != io.EOF {
+		return nil, err
+	} else if is {
+		rd, err = xz.NewReader(b)
+		if err != nil {
+			return nil, err
+		}
+		b = bufio.NewReaderSize(rd, bufSize)
+	} else if is, err := IsZst(b); err != nil && err != io.EOF {
+		return nil, err
+	} else if is {
+		rd, err = zstd.NewReader(b)
+		if err != nil {
+			return nil, err
+		}
+		b = bufio.NewReaderSize(rd, bufSize)
 	}
 
 	// check BOM
@@ -228,59 +268,17 @@ func Ropen(f string) (*Reader, error) {
 // Wopen opens a buffered reader.
 // If f == "-", then stdout will be used.
 // If f endswith ".gz", then the output will be gzipped.
+// If f endswith ".xz", then the output will be zx-compressed.
+// If f endswith ".zst", then the output will be zstd-compressed.
 func Wopen(f string) (*Writer, error) {
-	var wtr *os.File
-	if f == "-" {
-		wtr = os.Stdout
-	} else {
-		dir := filepath.Dir(f)
-		fi, err := os.Stat(dir)
-		if err == nil && !fi.IsDir() {
-			return nil, fmt.Errorf("can not write file into a non-directory path: %s", dir)
-		}
-		if os.IsNotExist(err) {
-			os.MkdirAll(dir, 0755)
-		}
-
-		wtr, err = os.Create(f)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if !strings.HasSuffix(f, ".gz") {
-		return &Writer{bufio.NewWriterSize(wtr, bufSize), wtr, nil}, nil
-	}
-	gz := gzip.NewWriter(wtr)
-	return &Writer{bufio.NewWriterSize(gz, bufSize), wtr, gz}, nil
-}
-
-// WopenGzip opens a buffered gzipped reader.
-// If f == "-", then stdout will be used.
-func WopenGzip(f string) (*Writer, error) {
-	var wtr *os.File
-	if f == "-" {
-		wtr = os.Stdout
-	} else {
-		dir := filepath.Dir(f)
-		fi, err := os.Stat(dir)
-		if err == nil && !fi.IsDir() {
-			return nil, fmt.Errorf("can not write file into a non-directory path: %s", dir)
-		}
-		if os.IsNotExist(err) {
-			os.MkdirAll(dir, 0755)
-		}
-		wtr, err = os.Create(f)
-		if err != nil {
-			return nil, err
-		}
-	}
-	gz := gzip.NewWriter(wtr)
-	return &Writer{bufio.NewWriterSize(gz, bufSize), wtr, gz}, nil
+	return WopenFile(f, os.O_RDONLY, 0)
 }
 
 // WopenFile opens a buffered reader.
 // If f == "-", then stdout will be used.
 // If f endswith ".gz", then the output will be gzipped.
+// If f endswith ".xz", then the output will be zx-compressed.
+// If f endswith ".zst", then the output will be zstd-compressed.
 func WopenFile(f string, flag int, perm os.FileMode) (*Writer, error) {
 	var wtr *os.File
 	if f == "-" {
@@ -299,9 +297,19 @@ func WopenFile(f string, flag int, perm os.FileMode) (*Writer, error) {
 			return nil, err
 		}
 	}
-	if !strings.HasSuffix(f, ".gz") {
-		return &Writer{bufio.NewWriterSize(wtr, bufSize), wtr, nil}, nil
+
+	f2 := strings.ToLower(f)
+	if strings.HasSuffix(f2, ".gz") {
+		gz := gzip.NewWriter(wtr)
+		return &Writer{bufio.NewWriterSize(gz, bufSize), wtr, gz, nil, nil}, nil
 	}
-	gz := gzip.NewWriter(wtr)
-	return &Writer{bufio.NewWriterSize(gz, bufSize), wtr, gz}, nil
+	if strings.HasSuffix(f2, ".xz") {
+		xw, err := xz.NewWriter(wtr)
+		return &Writer{bufio.NewWriterSize(xw, bufSize), wtr, nil, xw, nil}, err
+	}
+	if strings.HasSuffix(f2, ".zst") {
+		zw, err := zstd.NewWriter(wtr)
+		return &Writer{bufio.NewWriterSize(zw, bufSize), wtr, nil, nil, zw}, err
+	}
+	return &Writer{bufio.NewWriterSize(wtr, bufSize), wtr, nil, nil, nil}, nil
 }
