@@ -271,7 +271,7 @@ func Ropen(f string) (*Reader, error) {
 // If f endswith ".xz", then the output will be zx-compressed.
 // If f endswith ".zst", then the output will be zstd-compressed.
 func Wopen(f string) (*Writer, error) {
-	return WopenFile(f, os.O_RDONLY, 0)
+	return WopenFile(f, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 }
 
 // WopenFile opens a buffered reader.
