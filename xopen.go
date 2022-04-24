@@ -88,7 +88,8 @@ func CheckBytes(b *bufio.Reader, buf []byte) (bool, error) {
 
 	m, err := b.Peek(len(buf))
 	if err != nil {
-		return false, ErrNoContent
+		// return false, ErrNoContent
+		return false, err // EOF
 	}
 	for i := range buf {
 		if m[i] != buf[i] {
@@ -161,31 +162,58 @@ func Buf(r io.Reader) (*Reader, error) {
 	b := bufio.NewReaderSize(r, bufSize)
 	var rd io.Reader
 	var rdr io.ReadCloser
-	if is, err := IsGzip(b); err != nil && err != io.EOF {
-		return nil, err
+
+	if is, err := IsGzip(b); err != nil {
+		// check BOM
+		t, _, err := b.ReadRune() // no content
+		if err != nil {
+			return nil, ErrNoContent
+		}
+		if t != '\uFEFF' {
+			b.UnreadRune()
+		}
+		return &Reader{b, r, rdr}, nil // non-gzip file with content less than 2 bytes
 	} else if is {
 		rdr, err = gzip.NewReader(b)
 		if err != nil {
 			return nil, err
 		}
 		b = bufio.NewReaderSize(rdr, bufSize)
-	} else if is, err := IsXz(b); err != nil && err != io.EOF {
-		return nil, err
-	} else if is {
-		rd, err = xz.NewReader(b)
+	} else if is, err := IsZst(b); err != nil {
+		// check BOM
+		t, _, err := b.ReadRune() // no content
 		if err != nil {
-			return nil, err
+			return nil, ErrNoContent
 		}
-		b = bufio.NewReaderSize(rd, bufSize)
-	} else if is, err := IsZst(b); err != nil && err != io.EOF {
-		return nil, err
+		if t != '\uFEFF' {
+			b.UnreadRune()
+		}
+		return &Reader{b, r, rdr}, nil // non-gzip/zst file with content less than 4 bytes
 	} else if is {
 		rd, err = zstd.NewReader(b)
 		if err != nil {
 			return nil, err
 		}
 		b = bufio.NewReaderSize(rd, bufSize)
+	} else if is, err := IsXz(b); err != nil {
+		// check BOM
+		t, _, err := b.ReadRune() // no content
+		if err != nil {
+			return nil, ErrNoContent
+		}
+		if t != '\uFEFF' {
+			b.UnreadRune()
+		}
+		return &Reader{b, r, rdr}, nil // non-gzip/zst/xz file with content less than 6 bytes
+	} else if is {
+		rd, err = xz.NewReader(b)
+		if err != nil {
+			return nil, err
+		}
+		b = bufio.NewReaderSize(rd, bufSize)
 	}
+
+	// other files with content >= 6 bytes
 
 	// check BOM
 	t, _, err := b.ReadRune()
