@@ -108,11 +108,18 @@ type Reader struct {
 
 // Close the associated files.
 func (r *Reader) Close() error {
+	var err error
 	if r.gz != nil {
-		r.gz.Close()
+		err = r.gz.Close()
+		if err != nil {
+			return err
+		}
 	}
 	if c, ok := r.rdr.(io.ReadCloser); ok {
-		c.Close()
+		err = c.Close()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -128,29 +135,54 @@ type Writer struct {
 
 // Close the associated files.
 func (w *Writer) Close() error {
-	w.Flush()
+	var err error
+	err = w.Flush()
+	if err != nil {
+		return err
+	}
+
 	if w.gz != nil {
-		w.gz.Close()
+		err = w.gz.Close()
+		if err != nil {
+			return err
+		}
 	}
 	if w.xw != nil {
-		w.xw.Close()
+		err = w.xw.Close()
+		if err != nil {
+			return err
+		}
 	}
 	if w.zw != nil {
-		w.zw.Close()
+		err = w.zw.Close()
+		if err != nil {
+			return err
+		}
 	}
-	w.wtr.Close()
-	return nil
+	return w.wtr.Close()
 }
 
 // Flush the writer.
-func (w *Writer) Flush() {
-	w.Writer.Flush()
+func (w *Writer) Flush() error {
+	var err error
+	err = w.Writer.Flush()
+	if err != nil {
+		return err
+	}
+
 	if w.gz != nil {
-		w.gz.Flush()
+		err = w.gz.Flush()
+		if err != nil {
+			return err
+		}
 	}
 	if w.zw != nil {
-		w.zw.Flush()
+		err = w.zw.Flush()
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 var bufSize = 65536
