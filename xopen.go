@@ -22,6 +22,8 @@ import (
 	"github.com/ulikunitz/xz"
 )
 
+// Level is the default compression level of gzip.
+// This value will be automatically adjusted to the default value of zstd or bzip2.
 var Level = gzip.DefaultCompression
 
 // ErrNoContent means nothing in the stream/file.
@@ -393,6 +395,9 @@ func WopenFile(f string, flag int, perm os.FileMode) (*Writer, error) {
 	f2 := strings.ToLower(f)
 	if strings.HasSuffix(f2, ".gz") {
 		gz, err := gzip.NewWriterLevel(wtr, Level)
+		if err != nil {
+			err = errors.New(fmt.Sprintf("xopen: %s", err))
+		}
 		return &Writer{bufio.NewWriterSize(gz, bufSize), wtr, gz, nil, nil, nil}, err
 	}
 	if strings.HasSuffix(f2, ".xz") {
@@ -400,11 +405,25 @@ func WopenFile(f string, flag int, perm os.FileMode) (*Writer, error) {
 		return &Writer{bufio.NewWriterSize(xw, bufSize), wtr, nil, xw, nil, nil}, err
 	}
 	if strings.HasSuffix(f2, ".zst") {
-		zw, err := zstd.NewWriter(wtr, zstd.WithEncoderLevel(zstd.EncoderLevel(Level)))
+		level := Level
+		if level == gzip.DefaultCompression {
+			level = 2
+		}
+		zw, err := zstd.NewWriter(wtr, zstd.WithEncoderLevel(zstd.EncoderLevel(level)))
+		if err != nil {
+			err = errors.New(fmt.Sprintf("xopen: zstd: %s", err))
+		}
 		return &Writer{bufio.NewWriterSize(zw, bufSize), wtr, nil, nil, zw, nil}, err
 	}
 	if strings.HasSuffix(f2, ".bz2") {
-		bz2, err := bzip2.NewWriter(wtr, &bzip2.WriterConfig{Level: Level})
+		level := Level
+		if level == gzip.DefaultCompression {
+			level = 6
+		}
+		bz2, err := bzip2.NewWriter(wtr, &bzip2.WriterConfig{Level: level})
+		if err != nil {
+			err = errors.New(fmt.Sprintf("xopen: %s", err))
+		}
 		return &Writer{bufio.NewWriterSize(bz2, bufSize), wtr, nil, nil, nil, bz2}, err
 	}
 	return &Writer{bufio.NewWriterSize(wtr, bufSize), wtr, nil, nil, nil, nil}, nil
